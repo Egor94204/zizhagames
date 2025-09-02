@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ЖижаGames</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f4e1e9;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      border: 2px solid #ff6f91;
+      display: block;
+      margin: 0 auto;
+      cursor: pointer;
+    }
+    #instructions {
+      text-align: center;
+      color: red;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="instructions">Кликни на холст, чтобы начать. Меняй местами эмодзи (клик + клик)!</div>
+  <script>
+    let grid = [];
+    let gridSizeX, gridSizeY;
+    let cellSize = 40;
+    let level = 1;
+    let moves = 10;
+    let score = 0;
+    let targetScore;
+    let gameState = 'playing';
+    let selected = null;
+    let emojis = ['❤️', '🤍', '🎭', '🎮', '🥇', '💟', '🎁', '🍔'];
+    let messageLevel1 = 'Котёнок, я хочу, чтобы ты увидела того Егора, с которым ты начала встречаться и которому доверилась!';
+    let messageLevel2 = 'Ты самая очаровательная девушка на свете! И подруги у тебя классные!)';
+    let finalMessages = [
+      'Приглашаю тебя на свидание 6.09.2025',
+      'Необходимое требование быть красивой, но как мне повезло, что ты выиграла бы любой конкурс красоты',
+      'Я заберу тебя днём! P.S. Я знаю, что ты хочешь на страшный квест, но мы на него не пойдём.'
+    ];
+    let showMessage = false;
+    let messageTimer = 0;
+    let currentMessage = '';
+    let currentFinalMessageIndex = 0;
+    let chestClicked = false;
+    let isFocused = false;
+    let stars = [];
+
+    function setup() {
+      let canvas = createCanvas(600, 400);
+      canvas.elt.tabIndex = 0;
+      canvas.mousePressed(canvasClicked);
+      setupLevel();
+      // Initialize stars for background
+      for (let i = 0; i < 100; i++) {
+        stars.push({
+          x: random(width),
+          y: random(height),
+          size: random(1, 3)
+        });
+      }
+      console.log('Setup completed. Level:', level, 'Grid:', grid);
+    }
+
+    function canvasClicked() {
+      isFocused = true;
+      document.getElementById('instructions').style.display = 'none';
+      console.log('Canvas focused');
+    }
+
+    function setupLevel() {
+      if (level === 1) {
+        gridSizeX = 6;
+        gridSizeY = 6;
+        targetScore = 20;
+        moves = 10;
+      } else if (level === 2) {
+        gridSizeX = 7;
+        gridSizeY = 7;
+        targetScore = 30;
+        moves = 12;
+      } else if (level === 3) {
+        gridSizeX = 8;
+        gridSizeY = 8;
+        targetScore = 40;
+        moves = 15;
+      }
+      grid = [];
+      for (let i = 0; i < gridSizeX; i++) {
+        grid[i] = [];
+        for (let j = 0; j < gridSizeY; j++) {
+          grid[i][j] = floor(random(emojis.length));
+        }
+      }
+      checkAndRemoveMatches();
+      let maxAttempts = 100;
+      let attempts = 0;
+      while (!hasPossibleMoves() && attempts < maxAttempts) {
+        for (let i = 0; i < gridSizeX; i++) {
+          for (let j = 0; j < gridSizeY; j++) {
+            grid[i][j] = floor(random(emojis.length));
+          }
+        }
+        checkAndRemoveMatches();
+        attempts++;
+      }
+      if (attempts >= maxAttempts) {
+        console.error('Не удалось создать сетку с возможными ходами');
+        alert('Ошибка: не удалось создать игровую сетку. Попробуйте перезагрузить.');
+      }
+      console.log('Level setup:', level, 'Grid size:', gridSizeX, 'x', gridSizeY);
+    }
+
+    function draw() {
+      // Draw starry night sky background
+      background(0, 0, 30); // Dark blue background
+      fill(255);
+      noStroke();
+      for (let star of stars) {
+        ellipse(star.x, star.y, star.size, star.size);
+      }
+      
+      if (gameState === 'playing') {
+        let offsetX = (width - gridSizeX * cellSize) / 2;
+        let offsetY = (height - gridSizeY * cellSize) / 2;
+        for (let i = 0; i < gridSizeX; i++) {
+          for (let j = 0; j < gridSizeY; j++) {
+            let emojiIndex = grid[i][j];
+            if (emojiIndex !== -1) {
+              textSize(30);
+              textAlign(CENTER, CENTER);
+              textStyle(NORMAL);
+              textFont('Segoe UI Emoji, Apple Color Emoji, Arial, sans-serif');
+              text(emojis[emojiIndex], i * cellSize + offsetX + cellSize / 2, j * cellSize + offsetY + cellSize / 2);
+            }
+          }
+        }
+        
+        if (selected) {
+          noFill();
+          stroke(255);
+          strokeWeight(3);
+          rect(selected.i * cellSize + offsetX, selected.j * cellSize + offsetY, cellSize, cellSize);
+          strokeWeight(1);
+        }
+        
+        textSize(20);
+        fill(255); // Белый цвет для текста
+        textAlign(LEFT, TOP);
+        textFont('Arial');
+        text(`Уровень: ${level}`, 10, 10);
+        text(`Очки: ${score}/${targetScore}`, 10, 40);
+        text(`Ходы: ${moves}`, 10, 70);
+        
+        if (score >= targetScore) {
+          if (level === 1) {
+            showMessage = true;
+            gameState = 'message';
+            currentMessage = messageLevel1;
+            messageTimer = frameCount;
+          } else if (level === 2) {
+            showMessage = true;
+            gameState = 'message';
+            currentMessage = messageLevel2;
+            messageTimer = frameCount;
+          } else {
+            gameState = 'finished';
+          }
+        } else if (moves <= 0) {
+          gameState = 'gameover';
+        }
+      } else if (gameState === 'message') {
+        textSize(20);
+        fill(255); // Белый цвет для текста
+        textAlign(LEFT, TOP);
+        textStyle(NORMAL);
+        textFont('Arial');
+        textWrap(WORD);
+        textLeading(30);
+        text(currentMessage, 10, 20, 580);
+        if (frameCount - messageTimer > 180) {
+          showMessage = false;
+          gameState = 'playing';
+          level++;
+          score = 0;
+          setupLevel();
+        }
+      } else if (gameState === 'finished') {
+        if (!chestClicked) {
+          fill(218, 165, 32);
+          rect(width / 2 - 50, height / 2 - 50, 100, 100);
+          fill(139, 69, 19);
+          rect(width / 2 - 20, height / 2 + 30, 40, 20);
+          textSize(20);
+          fill(255); // Белый цвет для текста
+          textAlign(CENTER, CENTER);
+          textFont('Arial');
+          text('Кликни на сундучок!', width / 2, height / 2 - 80);
+        }
+        
+        if (chestClicked) {
+          textSize(20);
+          fill(255); // Белый цвет для текста
+          textAlign(LEFT, TOP);
+          textStyle(NORMAL);
+          textFont('Arial');
+          textWrap(WORD);
+          textLeading(30);
+          text(finalMessages[currentFinalMessageIndex], 10, 20, 580);
+          if (currentFinalMessageIndex === 0 && frameCount - messageTimer > 300) {
+            currentFinalMessageIndex = 1;
+            messageTimer = frameCount;
+          } else if (currentFinalMessageIndex === 1 && frameCount - messageTimer > 420) {
+            currentFinalMessageIndex = 2;
+          }
+        }
+      } else if (gameState === 'gameover') {
+        textSize(20);
+        fill(255); // Белый цвет для текста
+        textAlign(LEFT, TOP);
+        textStyle(NORMAL);
+        textFont('Arial');
+        textWrap(WORD);
+        textLeading(30);
+        text('Ходы закончились! 😔 Нажми пробел, чтобы начать заново!', 10, 20, 580);
+      }
+    }
+
+    function mousePressed() {
+      if (!isFocused) return;
+      if (gameState === 'playing') {
+        let offsetX = (width - gridSizeX * cellSize) / 2;
+        let offsetY = (height - gridSizeY * cellSize) / 2;
+        let i = floor((mouseX - offsetX) / cellSize);
+        let j = floor((mouseY - offsetY) / cellSize);
+        if (i >= 0 && i < gridSizeX && j >= 0 && j < gridSizeY && grid[i][j] !== -1) {
+          if (!selected) {
+            selected = { i: i, j: j };
+            console.log('Selected:', i, j);
+          } else {
+            let di = abs(selected.i - i);
+            let dj = abs(selected.j - j);
+            if ((di === 1 && dj === 0) || (di === 0 && dj === 1)) {
+              swapTiles(selected.i, selected.j, i, j);
+              let matches = checkMatches();
+              if (matches.length > 0) {
+                moves--;
+                removeMatches(matches);
+                dropTiles();
+                checkAndRemoveMatches();
+                console.log('Swap successful, matches:', matches);
+              } else {
+                swapTiles(selected.i, selected.j, i, j);
+                console.log('Swap reverted, no matches');
+              }
+              selected = null;
+            } else {
+              selected = { i: i, j: j };
+              console.log('New selection:', i, j);
+            }
+          }
+        }
+      } else if (gameState === 'finished' && !chestClicked) {
+        if (mouseX > width / 2 - 50 && mouseX < width / 2 + 50 && mouseY > height / 2 - 50 && mouseY < height / 2 + 50) {
+          chestClicked = true;
+          messageTimer = frameCount;
+          console.log('Chest clicked');
+        }
+      }
+    }
+
+    function keyPressed() {
+      if (gameState === 'gameover' && key === ' ') {
+        level = 1;
+        score = 0;
+        gameState = 'playing';
+        setupLevel();
+        console.log('Game restarted');
+      }
+    }
+
+    function swapTiles(i1, j1, i2, j2) {
+      let temp = grid[i1][j1];
+      grid[i1][j1] = grid[i2][j2];
+      grid[i2][j2] = temp;
+    }
+
+    function checkMatches() {
+      let matches = [];
+      for (let j = 0; j < gridSizeY; j++) {
+        let count = 1;
+        let start = 0;
+        for (let i = 1; i < gridSizeX; i++) {
+          if (grid[i][j] !== -1 && grid[i][j] === grid[i - 1][j]) {
+            count++;
+          } else {
+            if (count >= 3) {
+              for (let k = start; k < start + count; k++) {
+                matches.push({ i: k, j: j });
+              }
+            }
+            count = 1;
+            start = i;
+          }
+        }
+        if (count >= 3) {
+          for (let k = start; k < start + count; k++) {
+            matches.push({ i: k, j: j });
+          }
+        }
+      }
+      for (let i = 0; i < gridSizeX; i++) {
+        let count = 1;
+        let start = 0;
+        for (let j = 1; j < gridSizeY; j++) {
+          if (grid[i][j] !== -1 && grid[i][j] === grid[i][j - 1]) {
+            count++;
+          } else {
+            if (count >= 3) {
+              for (let k = start; k < start + count; k++) {
+                matches.push({ i: i, j: k });
+              }
+            }
+            count = 1;
+            start = j;
+          }
+        }
+        if (count >= 3) {
+          for (let k = start; k < start + count; k++) {
+            matches.push({ i: i, j: k });
+          }
+        }
+      }
+      return matches;
+    }
+
+    function removeMatches(matches) {
+      for (let match of matches) {
+        if (grid[match.i][match.j] !== -1) {
+          grid[match.i][match.j] = -1;
+          score++;
+        }
+      }
+      console.log('Matches removed, score:', score);
+    }
+
+    function dropTiles() {
+      for (let i = 0; i < gridSizeX; i++) {
+        let empty = gridSizeY - 1;
+        for (let j = gridSizeY - 1; j >= 0; j--) {
+          if (grid[i][j] !== -1) {
+            grid[i][empty] = grid[i][j];
+            if (empty !== j) {
+              grid[i][j] = -1;
+            }
+            empty--;
+          }
+        }
+        for (let j = empty; j >= 0; j--) {
+          grid[i][j] = floor(random(emojis.length));
+        }
+      }
+      if (!hasPossibleMoves()) {
+        let maxAttempts = 50;
+        let attempts = 0;
+        while (!hasPossibleMoves() && attempts < maxAttempts) {
+          for (let i = 0; i < gridSizeX; i++) {
+            for (let j = 0; j < gridSizeY; j++) {
+              grid[i][j] = floor(random(emojis.length));
+            }
+          }
+          checkAndRemoveMatches();
+          attempts++;
+        }
+        if (attempts >= maxAttempts) {
+          console.error('Не удалось создать сетку с ходами после dropTiles');
+        }
+      }
+      console.log('Tiles dropped');
+    }
+
+    function checkAndRemoveMatches() {
+      let matches = checkMatches();
+      while (matches.length > 0) {
+        removeMatches(matches);
+        dropTiles();
+        matches = checkMatches();
+      }
+    }
+
+    function hasPossibleMoves() {
+      for (let i = 0; i < gridSizeX - 1; i++) {
+        for (let j = 0; j < gridSizeY; j++) {
+          if (grid[i][j] !== -1 && grid[i + 1][j] !== -1) {
+            swapTiles(i, j, i + 1, j);
+            let matches = checkMatches();
+            swapTiles(i, j, i + 1, j);
+            if (matches.length > 0) {
+              return true;
+            }
+          }
+        }
+      }
+      for (let i = 0; i < gridSizeX; i++) {
+        for (let j = 0; j < gridSizeY - 1; j++) {
+          if (grid[i][j] !== -1 && grid[i][j + 1] !== -1) {
+            swapTiles(i, j, i, j + 1);
+            let matches = checkMatches();
+            swapTiles(i, j, i, j + 1);
+            if (matches.length > 0) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+  </script>
+</body>
+</html>
